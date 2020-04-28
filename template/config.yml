@@ -1,13 +1,13 @@
 site:
-    title: "纸小墨官方博客"
-    subtitle: "构建只为纯粹书写的博客"
+    title: "Linx's Solution"
+    subtitle: "记录解决方案"
     limit: 10
     theme: theme
     lang: zh-cn
-    url: "http://www.chole.io/blog"
-    comment: username
-    logo: "-/images/avatar.png"
-    # link: "{category}/{year}/{month}/{day}/{title}.html"
+    url: "https://llinx.me/about.html"
+    # comment: username
+    logo: "-/images/photo.jpg"
+    link: "{category}/{year}/{month}/{day}/{title}.html"
     # link: "{year}{month}{day}{hour}{minute}{second}.html"
     # root: "/blog"
 
@@ -15,7 +15,7 @@ authors:
     me:
         name: "纸小墨"
         intro: "构建只为纯粹书写的博客"
-        avatar: "-/images/avatar.png"
+        avatar: "-/images/photo.jpg"
 
 build:
     # output: "public"

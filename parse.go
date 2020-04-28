@@ -1,14 +1,15 @@
 package main
 
 import (
+	"github.com/BurntSushi/toml"
 	"html/template"
 	"io/ioutil"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/InkProject/blackfriday"
 	"gopkg.in/yaml.v2"
+	"ink/blackfriday"
 )
 
 type SiteConfig struct {
@@ -33,7 +34,7 @@ type AuthorConfig struct {
 }
 
 type BuildConfig struct {
-	Output	string
+	Output  string
 	Port    string
 	Watch   bool
 	Copy    []string
@@ -88,8 +89,9 @@ type ThemeConfig struct {
 }
 
 const (
-	CONFIG_SPLIT = "---"
-	MORE_SPLIT   = "<!--more-->"
+	CONFIG_SPLIT  = "---"
+	CONFIG_SPLIT1 = "+++"
+	MORE_SPLIT    = "<!--more-->"
 )
 
 func ParseMarkdown(markdown string) template.HTML {
@@ -122,7 +124,7 @@ func ParseGlobalConfig(configPath string, develop bool) *GlobalConfig {
 	if config.Site.Url != "" && strings.HasSuffix(config.Site.Url, "/") {
 		config.Site.Url = strings.TrimSuffix(config.Site.Url, "/")
 	}
-	if (config.Build.Output == "") {
+	if config.Build.Output == "" {
 		config.Build.Output = "public"
 	}
 	// Parse Theme Config
@@ -161,18 +163,29 @@ func ParseArticleConfig(markdownPath string) (config *ArticleConfig, content str
 	// Split config and markdown
 	contentStr := string(data)
 	contentStr = ReplaceRootFlag(contentStr)
-	markdownStr := strings.SplitN(contentStr, CONFIG_SPLIT, 2)
-	contentLen := len(markdownStr)
+	markdownStr := []string{}
+	contentLen := 0
+	if strings.HasPrefix(contentStr, "+") {
+		markdownStr = strings.SplitN(contentStr, CONFIG_SPLIT1, 3)
+		contentLen = len(markdownStr)
+	} else {
+		markdownStr = strings.SplitN(contentStr, CONFIG_SPLIT, 3)
+		contentLen = len(markdownStr)
+	}
+
 	if contentLen > 0 {
-		configStr = markdownStr[0]
+		configStr = markdownStr[1]
 	}
 	if contentLen > 1 {
-		content = markdownStr[1]
+		content = markdownStr[2]
 	}
 	// Parse config content
 	if err := yaml.Unmarshal([]byte(configStr), &config); err != nil {
-		Error(err.Error())
-		return nil, ""
+		if err = toml.Unmarshal([]byte(configStr), &config); err != nil {
+			Error(err.Error())
+			return nil, ""
+		}
+
 	}
 	if config == nil {
 		return nil, ""

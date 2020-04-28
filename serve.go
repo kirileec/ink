@@ -4,11 +4,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/InkProject/ink.go"
 	"github.com/facebookgo/symwalk"
 	"github.com/fsnotify/fsnotify"
 	"github.com/gorilla/websocket"
 	"github.com/taadis/oper"
+	"ink/ink.go"
 )
 
 var watcher *fsnotify.Watcher

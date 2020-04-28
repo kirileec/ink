@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/linxlib/logs"
 	"io"
 	"os"
 	"runtime"
@@ -17,8 +18,9 @@ const (
 )
 
 const (
-	DATE_FORMAT               = "2006-01-02 15:04:05"
-	DATE_FORMAT_WITH_TIMEZONE = "2006-01-02 15:04:05 -0700"
+	DATE_FORMAT               = "2006-01-02T15:04:05"
+	DATE_FORMAT1              = "2006-01-02 15:04:05"
+	DATE_FORMAT_WITH_TIMEZONE = "2006-01-02T15:04:05Z08:00"
 )
 
 var exitCode int
@@ -55,11 +57,16 @@ func Fatal(info interface{}) {
 
 // Parse date by std date string
 func ParseDate(dateStr string) time.Time {
-	date, err := time.Parse(fmt.Sprintf(DATE_FORMAT_WITH_TIMEZONE), dateStr)
+
+	date, err := time.ParseInLocation(DATE_FORMAT_WITH_TIMEZONE, dateStr, time.Now().Location())
 	if err != nil {
-		date, err = time.ParseInLocation(fmt.Sprintf(DATE_FORMAT), dateStr, time.Now().Location())
+		date, err = time.ParseInLocation(DATE_FORMAT, dateStr, time.Now().Location())
 		if err != nil {
-			Fatal(err.Error())
+			date, err = time.ParseInLocation(DATE_FORMAT1, dateStr, time.Now().Location())
+			if err != nil {
+				logs.Error(err)
+			}
+
 		}
 	}
 	return date
@@ -79,9 +86,11 @@ func Exists(path string) bool {
 
 // Check file if is directory
 func IsDir(path string) bool {
-  file, err := os.Stat(path)
-  if err != nil { return false }
-  return file.IsDir()
+	file, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return file.IsDir()
 }
 
 // Copy folder and file

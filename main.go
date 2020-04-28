@@ -10,19 +10,40 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/codegangsta/cli"
 	"github.com/facebookgo/symwalk"
+	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v2"
 	"html/template"
 	"time"
 )
 
+/**
+title: "Android Check Sign"
+date: 2020-04-21T09:09:28+08:00
+lastmod: 2020-04-21T09:09:28+08:00
+draft: false
+keywords: []
+description: ""
+tags: []
+categories: []
+author: "linx"
+
+# You can also close(false) or open(true) something for this content.
+# P.S. comment can only be closed
+comment: false
+toc: true
+autoCollapseToc: true
+postMetaInFooter: true
+hiddenFromHomePage: false
+*/
+
 const (
-	VERSION            = "RELEASE 2018-07-27"
-	DEFAULT_ROOT       = "blog"
-	DATE_FORMAT_STRING = "2006-01-02 15:04:05"
+	VERSION            = "RELEASE 2020-04-27"
+	DEFAULT_ROOT       = "template"
+	DATE_FORMAT_STRING = DATE_FORMAT_WITH_TIMEZONE
 	INDENT             = "  " // 2 spaces
-	POST_TEMPLATE      = `title: {{.Title}}
+	POST_TEMPLATE      = `---
+title: {{.Title}}
 date: {{.DateString}}
 author: {{.Author}}
 {{- if .Cover}}
@@ -59,7 +80,7 @@ func main() {
 	app.Commands = []*cli.Command{
 		{
 			Name:  "build",
-			Usage: "Generate blog to public folder",
+			Usage: "构建博客到public目录",
 			Action: func(c *cli.Context) error {
 				ParseGlobalConfigByCli(c, false)
 				Build()
@@ -68,7 +89,7 @@ func main() {
 		},
 		{
 			Name:  "preview",
-			Usage: "Run in server mode to preview blog",
+			Usage: "预览博客",
 			Action: func(c *cli.Context) error {
 				ParseGlobalConfigByCli(c, true)
 				Build()
@@ -79,7 +100,7 @@ func main() {
 		},
 		{
 			Name:  "publish",
-			Usage: "Generate blog to public folder and publish",
+			Usage: "发布博客",
 			Action: func(c *cli.Context) error {
 				ParseGlobalConfigByCli(c, false)
 				Build()
@@ -89,7 +110,7 @@ func main() {
 		},
 		{
 			Name:  "serve",
-			Usage: "Run in server mode to serve blog",
+			Usage: "运行博客",
 			Action: func(c *cli.Context) error {
 				ParseGlobalConfigByCli(c, true)
 				Build()
@@ -107,7 +128,7 @@ func main() {
 		},
 		{
 			Name:  "new",
-			Usage: "Creates a new article",
+			Usage: "创建文章",
 			Flags: []cli.Flag{
 				&cli.BoolFlag{
 					Name:  "hide",
