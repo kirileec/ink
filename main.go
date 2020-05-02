@@ -233,7 +233,7 @@ func New(c *cli.Context) {
 	// Parse args
 	args := c.Args()
 	if args.Len() > 0 {
-		blogTitle = args.Slice()[0]
+		blogTitle = strings.Join(args.Slice(), " ")
 	}
 	if blogTitle == "" {
 		if c.String("title") != "" {
@@ -243,17 +243,12 @@ func New(c *cli.Context) {
 		}
 	}
 
-	fileName = blogTitle + ".md"
+	fileName = strings.ReplaceAll(blogTitle, " ", "-") + ".md"
 	if c.String("file") != "" {
 		fileName = c.String("file")
 	}
 
-	if args.Len() > 1 {
-		author = args.Slice()[1]
-	}
-	if author == "" {
-		author = c.String("author")
-	}
+	author = "linx"
 
 	if c.Bool("post") && c.Bool("page") {
 		Fatal("The post and page arguments are mutually exclusive and cannot appear together")
@@ -282,6 +277,10 @@ func New(c *cli.Context) {
 	}
 
 	var filePath = "source/" + fileName
+	if postType == "post" {
+		filePath = "source/post/" + fileName
+	}
+
 	file, err := os.Create(filePath)
 	if err != nil {
 		Fatal(err)
@@ -348,7 +347,7 @@ func Publish() {
 		flag = "-c"
 	}
 	cmd := exec.Command(shell, flag, command)
-	cmd.Dir = filepath.Join(rootPath, globalConfig.Build.Output)
+	cmd.Dir = rootPath
 	// Start print stdout and stderr of process
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
