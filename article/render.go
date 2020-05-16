@@ -68,9 +68,15 @@ func RenderArticles(tpl template.Template, articles Collections, wg *sync.WaitGr
 	for i, _ := range articles {
 		currentArticle := articles[i].(Article)
 		var renderArticle = RenderArticle{currentArticle, nil, nil}
+		if currentArticle.Type == "page" {
+			outPath := filepath.Join(PublicPath, currentArticle.Link)
+			wg.Add(1)
+			go RenderPage(tpl, renderArticle, outPath, wg)
+			continue
+		}
 		if i >= 1 {
-			article := articles[i-1].(Article)
-			renderArticle.Prev = &article
+			articleItem := articles[i-1].(Article)
+			renderArticle.Prev = &articleItem
 			if i <= articleCount-2 {
 				article := articles[i+1].(Article)
 				renderArticle.Next = &article
@@ -78,7 +84,12 @@ func RenderArticles(tpl template.Template, articles Collections, wg *sync.WaitGr
 			outPath := filepath.Join(PublicPath, currentArticle.Link)
 			wg.Add(1)
 			go RenderPage(tpl, renderArticle, outPath, wg)
+		} else {
+			outPath := filepath.Join(PublicPath, currentArticle.Link)
+			wg.Add(1)
+			go RenderPage(tpl, renderArticle, outPath, wg)
 		}
+
 	}
 }
 
@@ -126,7 +137,7 @@ func GenerateRSS(articles Collections, wg *sync.WaitGroup) {
 func RenderArticleList(rootPath string, articles Collections, tagName string, wg *sync.WaitGroup) {
 	defer wg.Done()
 	// Create path
-	pagePath := filepath.Join(PublicPath, RootPath)
+	pagePath := filepath.Join(PublicPath, rootPath)
 	os.MkdirAll(pagePath, 0777)
 	// Split page
 	limit := Global.Site.Limit
@@ -140,8 +151,8 @@ func RenderArticleList(rootPath string, articles Collections, tagName string, wg
 		page = 1
 	}
 	for i := 0; i < page; i++ {
-		var prev = filepath.Join(RootPath, "page"+strconv.Itoa(i)+".html")
-		var next = filepath.Join(RootPath, "page"+strconv.Itoa(i+2)+".html")
+		var prev = filepath.Join(rootPath, "page"+strconv.Itoa(i)+".html")
+		var next = filepath.Join(rootPath, "page"+strconv.Itoa(i+2)+".html")
 		outPath := filepath.Join(pagePath, "index.html")
 		if i != 0 {
 			fileName := "page" + strconv.Itoa(i+1) + ".html"
@@ -150,7 +161,7 @@ func RenderArticleList(rootPath string, articles Collections, tagName string, wg
 			prev = ""
 		}
 		if i == 1 {
-			prev = filepath.Join(RootPath, "index.html")
+			prev = filepath.Join(rootPath, "index.html")
 		}
 		first := i * limit
 		count := first + limit
