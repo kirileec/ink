@@ -1,6 +1,8 @@
-package main
+package command
 
 import (
+	"github.com/linxlib/logs"
+	"ink/article"
 	"os"
 	"path/filepath"
 
@@ -26,33 +28,33 @@ func Watch() {
 			case event := <-watcher.Events:
 				if event.Op == fsnotify.Write {
 					// Handle when file change
-					Log(event.Name)
-					ParseGlobalConfigWrap(rootPath, true)
+					logs.Info(event.Name)
+					article.ParseGlobalConfigWrap(article.RootPath, true)
 					Build()
 					if conn != nil {
 						if err := conn.WriteMessage(websocket.TextMessage, []byte("change")); err != nil {
-							Warn(err.Error())
+							logs.Warn(err)
 						}
 					}
 				}
 			case err := <-watcher.Errors:
-				Warn(err.Error())
+				logs.Warn(err)
 			}
 		}
 	}()
 	var dirs = []string{
-		filepath.Join(rootPath, "source"),
-		filepath.Join(themePath, "bundle"),
+		filepath.Join(article.RootPath, "source"),
+		filepath.Join(article.ThemePath, "bundle"),
 	}
 	var files = []string{
-		filepath.Join(rootPath, "config.yml"),
-		filepath.Join(themePath),
+		filepath.Join(article.RootPath, "config.yml"),
+		filepath.Join(article.ThemePath),
 	}
 	for _, source := range dirs {
 		symwalk.Walk(source, func(path string, f os.FileInfo, err error) error {
 			if f.IsDir() {
 				if err := watcher.Add(path); err != nil {
-					Warn(err.Error())
+					logs.Warn(err.Error())
 				}
 			}
 			return nil
@@ -60,7 +62,7 @@ func Watch() {
 	}
 	for _, source := range files {
 		if err := watcher.Add(source); err != nil {
-			Warn(err.Error())
+			logs.Warn(err.Error())
 		}
 	}
 }
@@ -71,36 +73,24 @@ func Websocket(ctx *ink.Context) {
 		WriteBufferSize: 1024,
 	}
 	if c, err := upgrader.Upgrade(ctx.Res, ctx.Req, nil); err != nil {
-		Warn(err)
+		logs.Warn(err)
 	} else {
 		conn = c
 	}
 	ctx.Stop()
 }
 
-func Serve() {
-	// editorWeb := ink.New()
-	//
-	// editorWeb.Get("/articles", ApiListArticle)
-	// editorWeb.Get("/articles/:id", ApiGetArticle)
-	// editorWeb.Post("/articles", ApiCreateArticle)
-	// editorWeb.Put("/articles/:id", ApiSaveArticle)
-	// editorWeb.Delete("/articles/:id", ApiRemoveArticle)
-	// editorWeb.Get("/config", ApiGetConfig)
-	// editorWeb.Put("/config", ApiSaveConfig)
-	// editorWeb.Post("/upload", ApiUploadFile)
-	// editorWeb.Use(ink.Cors)
-	// editorWeb.Get("*", ink.Static(filepath.Join("editor/assets")))
-
-	// Log("Access http://localhost:" + globalConfig.Build.Port + "/ to open editor")
-	// go editorWeb.Listen(":2333")
-
+func Serve(watch bool) {
+	Build()
+	if watch {
+		Watch()
+	}
 	previewWeb := ink.New()
 	previewWeb.Get("/live", Websocket)
-	previewWeb.Get("*", ink.Static(filepath.Join(rootPath, globalConfig.Build.Output)))
+	previewWeb.Get("*", ink.Static(filepath.Join(article.RootPath, article.Global.Build.Output)))
 
-	uri := "http://localhost:" + globalConfig.Build.Port + "/"
-	Log("Access " + uri + " to open preview")
+	uri := "http://localhost:" + article.Global.Build.Port + "/"
+	logs.Info("Access " + uri + " to open preview")
 	oper.Access(uri)
-	previewWeb.Listen(":" + globalConfig.Build.Port)
+	previewWeb.Listen(":" + article.Global.Build.Port)
 }

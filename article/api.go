@@ -1,11 +1,13 @@
-package main
+package article
 
 import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
 	"github.com/facebookgo/symwalk"
+	"github.com/linxlib/logs"
 	"ink/ink.go"
+	"ink/util"
 	"io/ioutil"
 	"mime/multipart"
 	"net/http"
@@ -52,7 +54,7 @@ func replyJSON(ctx *ink.Context, status int, data interface{}) {
 		ctx.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		ctx.Res.Write(jsonStr)
 	} else {
-		Warn(data)
+		logs.Warn(data)
 		http.Error(ctx.Res, data.(string), status)
 	}
 	ctx.Stop()
@@ -60,17 +62,17 @@ func replyJSON(ctx *ink.Context, status int, data interface{}) {
 
 func UpdateArticleCache() {
 	articleCache = make(map[string]CacheArticleInfo, 0)
-	symwalk.Walk(sourcePath, func(path string, info os.FileInfo, err error) error {
+	symwalk.Walk(SourcePath, func(path string, info os.FileInfo, err error) error {
 		fileExt := strings.ToLower(filepath.Ext(path))
 		if fileExt == ".md" {
 			fileName := strings.TrimPrefix(strings.TrimSuffix(strings.ToLower(path), ".md"), "template/source/")
-			config, _ := ParseArticleConfig(path)
+			articleConfig, _ := ParseArticleConfig(path)
 			id := hashPath(path)
-			articleCache[string(id)] = CacheArticleInfo{
+			articleCache[id] = CacheArticleInfo{
 				Name:    fileName,
 				Path:    path,
-				Date:    ParseDate(config.Date),
-				Article: config,
+				Date:    util.ParseDate(articleConfig.Date),
+				Article: articleConfig,
 			}
 		}
 		return nil
@@ -122,7 +124,7 @@ func ApiCreateArticle(ctx *ink.Context) {
 		replyJSON(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
-	filePath := filepath.Join(sourcePath, article.Name+".md")
+	filePath := filepath.Join(SourcePath, article.Name+".md")
 	err = ioutil.WriteFile(filePath, []byte(article.Content), 0644)
 	if err != nil {
 		replyJSON(ctx, http.StatusInternalServerError, err.Error())
@@ -184,7 +186,7 @@ func ApiUploadFile(ctx *ink.Context) {
 		replyJSON(ctx, http.StatusNotFound, "Not Found")
 		return
 	}
-	fileDirPath := filepath.Join(sourcePath, "images", article.Name)
+	fileDirPath := filepath.Join(SourcePath, "images", article.Name)
 	err = os.MkdirAll(fileDirPath, 0777)
 	if err != nil {
 		replyJSON(ctx, http.StatusInternalServerError, err.Error())
@@ -200,7 +202,7 @@ func ApiUploadFile(ctx *ink.Context) {
 }
 
 func ApiGetConfig(ctx *ink.Context) {
-	filePath := filepath.Join(rootPath, "config.yml")
+	filePath := filepath.Join(RootPath, "config.yml")
 	data, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		replyJSON(ctx, http.StatusInternalServerError, err.Error())
@@ -215,7 +217,7 @@ func ApiSaveConfig(ctx *ink.Context) {
 		replyJSON(ctx, http.StatusInternalServerError, err.Error())
 		return
 	}
-	filePath := filepath.Join(rootPath, "config.yml")
+	filePath := filepath.Join(RootPath, "config.yml")
 	err = ioutil.WriteFile(filePath, []byte(content), 0644)
 	if err != nil {
 		replyJSON(ctx, http.StatusInternalServerError, err.Error())
@@ -223,19 +225,3 @@ func ApiSaveConfig(ctx *ink.Context) {
 	}
 	replyJSON(ctx, http.StatusOK, nil)
 }
-
-// func ApiRenameArticle(ctx *ink.Context) {
-// 	// Rename
-// 	cacheArticle, ok := articleCache[ctx.Param["id"]]
-// 	if !ok {
-// 		replyJSON(ctx, http.StatusNotFound, "Not Found")
-// 		return
-// 	}
-// 	oldPath := cacheArticle.(map[string]CacheArticleInfo)["path"].(string)
-// 	newPath := filepath.Join(sourcePath, newArticle.Name+".md")
-// 	err = os.Rename(oldPath, newPath)
-// 	if err != nil {
-// 		replyJSON(ctx, http.StatusInternalServerError, err.Error())
-// 		return
-// 	}
-// }

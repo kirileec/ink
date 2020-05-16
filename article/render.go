@@ -1,15 +1,16 @@
-package main
+package article
 
 import (
 	"encoding/json"
+	"github.com/gorilla/feeds"
+	"github.com/linxlib/logs"
 	"html/template"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
-
-	"github.com/gorilla/feeds"
 )
 
 type Data interface{}
@@ -25,29 +26,29 @@ func CompileTpl(tplPath string, partialTpl string, name string) template.Templat
 	// Read template data from file
 	html, err := ioutil.ReadFile(tplPath)
 	if err != nil {
-		Fatal(err.Error())
+		logs.Fatal(err.Error())
 	}
 	// Append partial template
 	htmlStr := string(html) + partialTpl
 	funcMap := template.FuncMap{
 		"i18n": func(val string) string {
-			return globalConfig.I18n[val]
+			return Global.I18n[val]
 		},
 	}
 	// Generate html content
 	tpl, err := template.New(name).Funcs(funcMap).Parse(htmlStr)
 	if err != nil {
-		Fatal(err.Error())
+		logs.Fatal(err)
 	}
 	return *tpl
 }
 
 // Render html file by data
-func RenderPage(tpl template.Template, tplData interface{}, outPath string) {
+func RenderPage(tpl template.Template, tplData interface{}, outPath string, wg *sync.WaitGroup) {
 	// Create file
 	outFile, err := os.Create(outPath)
 	if err != nil {
-		Fatal(err.Error())
+		logs.Fatal(err)
 	}
 	defer func() {
 		outFile.Close()
@@ -56,12 +57,12 @@ func RenderPage(tpl template.Template, tplData interface{}, outPath string) {
 	// Template render
 	err = tpl.Execute(outFile, tplData)
 	if err != nil {
-		Fatal(err.Error())
+		logs.Fatal(err)
 	}
 }
 
 // Generate all article page
-func RenderArticles(tpl template.Template, articles Collections) {
+func RenderArticles(tpl template.Template, articles Collections, wg *sync.WaitGroup) {
 	defer wg.Done()
 	articleCount := len(articles)
 	for i, _ := range articles {
@@ -70,65 +71,65 @@ func RenderArticles(tpl template.Template, articles Collections) {
 		if i >= 1 {
 			article := articles[i-1].(Article)
 			renderArticle.Prev = &article
+			if i <= articleCount-2 {
+				article := articles[i+1].(Article)
+				renderArticle.Next = &article
+			}
+			outPath := filepath.Join(PublicPath, currentArticle.Link)
+			wg.Add(1)
+			go RenderPage(tpl, renderArticle, outPath, wg)
 		}
-		if i <= articleCount-2 {
-			article := articles[i+1].(Article)
-			renderArticle.Next = &article
-		}
-		outPath := filepath.Join(publicPath, currentArticle.Link)
-		wg.Add(1)
-		go RenderPage(tpl, renderArticle, outPath)
 	}
 }
 
 // Generate rss page
-func GenerateRSS(articles Collections) {
+func GenerateRSS(articles Collections, wg *sync.WaitGroup) {
 	defer wg.Done()
 	var feedArticles Collections
-	if len(articles) < globalConfig.Site.Limit {
+	if len(articles) < Global.Site.Limit {
 		feedArticles = articles
 	} else {
-		feedArticles = articles[0:globalConfig.Site.Limit]
+		feedArticles = articles[0:Global.Site.Limit]
 	}
-	if globalConfig.Site.Url != "" {
+	if Global.Site.Url != "" {
 		feed := &feeds.Feed{
-			Title:       globalConfig.Site.Title,
-			Link:        &feeds.Link{Href: globalConfig.Site.Url},
-			Description: globalConfig.Site.Subtitle,
-			Author:      &feeds.Author{globalConfig.Site.Title, ""},
+			Title:       Global.Site.Title,
+			Link:        &feeds.Link{Href: Global.Site.Url},
+			Description: Global.Site.Subtitle,
+			Author:      &feeds.Author{Global.Site.Title, ""},
 			Created:     time.Now(),
 		}
 		feed.Items = make([]*feeds.Item, 0)
 		for _, item := range feedArticles {
-			article := item.(Article)
+			articleItem := item.(Article)
 			feed.Items = append(feed.Items, &feeds.Item{
-				Title:       article.Title,
-				Link:        &feeds.Link{Href: globalConfig.Site.Url + "/" + article.Link},
-				Description: string(article.Preview),
-				Author:      &feeds.Author{article.Author.Name, ""},
-				Created:     article.Time,
-				Updated:     article.MTime,
+				Title:       articleItem.Title,
+				Link:        &feeds.Link{Href: Global.Site.Url + "/" + articleItem.Link},
+				Description: string(articleItem.Preview),
+				Author:      &feeds.Author{articleItem.Author.Name, ""},
+				Created:     articleItem.Time,
+				Updated:     articleItem.MTime,
 			})
 		}
 		if atom, err := feed.ToAtom(); err == nil {
-			err := ioutil.WriteFile(filepath.Join(publicPath, "atom.xml"), []byte(atom), 0644)
+			err := ioutil.WriteFile(filepath.Join(PublicPath, "atom.xml"), []byte(atom), 0644)
 			if err != nil {
-				Fatal(err.Error())
+				logs.Fatal(err.Error())
 			}
 		} else {
-			Fatal(err.Error())
+			logs.Fatal(err.Error())
 		}
 	}
 }
 
 // Generate article list page
-func RenderArticleList(rootPath string, articles Collections, tagName string) {
+func RenderArticleList(rootPath string, articles Collections, tagName string, wg *sync.WaitGroup) {
 	defer wg.Done()
 	// Create path
-	pagePath := filepath.Join(publicPath, rootPath)
+	pagePath := filepath.Join(PublicPath, RootPath)
 	os.MkdirAll(pagePath, 0777)
 	// Split page
-	limit := globalConfig.Site.Limit
+	limit := Global.Site.Limit
 	total := len(articles)
 	page := total / limit
 	rest := total % limit
@@ -139,8 +140,8 @@ func RenderArticleList(rootPath string, articles Collections, tagName string) {
 		page = 1
 	}
 	for i := 0; i < page; i++ {
-		var prev = filepath.Join(rootPath, "page"+strconv.Itoa(i)+".html")
-		var next = filepath.Join(rootPath, "page"+strconv.Itoa(i+2)+".html")
+		var prev = filepath.Join(RootPath, "page"+strconv.Itoa(i)+".html")
+		var next = filepath.Join(RootPath, "page"+strconv.Itoa(i+2)+".html")
 		outPath := filepath.Join(pagePath, "index.html")
 		if i != 0 {
 			fileName := "page" + strconv.Itoa(i+1) + ".html"
@@ -149,7 +150,7 @@ func RenderArticleList(rootPath string, articles Collections, tagName string) {
 			prev = ""
 		}
 		if i == 1 {
-			prev = filepath.Join(rootPath, "index.html")
+			prev = filepath.Join(RootPath, "index.html")
 		}
 		first := i * limit
 		count := first + limit
@@ -161,8 +162,8 @@ func RenderArticleList(rootPath string, articles Collections, tagName string) {
 		}
 		var data = map[string]interface{}{
 			"Articles": articles[first:count],
-			"Site":     globalConfig.Site,
-			"Develop":  globalConfig.Develop,
+			"Site":     Global.Site,
+			"Develop":  Global.Develop,
 			"Page":     i + 1,
 			"Total":    page,
 			"Prev":     prev,
@@ -171,25 +172,25 @@ func RenderArticleList(rootPath string, articles Collections, tagName string) {
 			"TagCount": len(articles),
 		}
 		wg.Add(1)
-		go RenderPage(pageTpl, data, outPath)
+		go RenderPage(PageTpl, data, outPath, wg)
 	}
 }
 
 // Generate article list JSON
-func GenerateJSON(articles Collections) {
+func GenerateJSON(articles Collections, wg *sync.WaitGroup) {
 	defer wg.Done()
 	datas := make([]map[string]interface{}, 0)
 	for i, _ := range articles {
-		article := articles[i].(Article)
+		articleItem := articles[i].(Article)
 		var data = map[string]interface{}{
-			"title":   article.Title,
-			"content": article.Markdown,
-			"preview": string(article.Preview),
-			"link":    article.Link,
-			"cover":   article.Cover,
+			"title":   articleItem.Title,
+			"content": articleItem.Markdown,
+			"preview": string(articleItem.Preview),
+			"link":    articleItem.Link,
+			"cover":   articleItem.Cover,
 		}
 		datas = append(datas, data)
 	}
 	str, _ := json.Marshal(datas)
-	ioutil.WriteFile(filepath.Join(publicPath, "index.json"), []byte(str), 0644)
+	ioutil.WriteFile(filepath.Join(PublicPath, "index.json"), []byte(str), 0644)
 }

@@ -1,70 +1,15 @@
 package main
 
 import (
-	"bufio"
-	"fmt"
-	"io/ioutil"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
-	"strings"
-
-	"github.com/facebookgo/symwalk"
 	"github.com/urfave/cli/v2"
-	"gopkg.in/yaml.v2"
-	"html/template"
-	"time"
+	"ink/article"
+	"ink/command"
+	"os"
 )
-
-/**
-title: "Android Check Sign"
-date: 2020-04-21T09:09:28+08:00
-lastmod: 2020-04-21T09:09:28+08:00
-draft: false
-keywords: []
-description: ""
-tags: []
-categories: []
-author: "linx"
-
-# You can also close(false) or open(true) something for this content.
-# P.S. comment can only be closed
-comment: false
-toc: true
-autoCollapseToc: true
-postMetaInFooter: true
-hiddenFromHomePage: false
-*/
 
 const (
-	VERSION            = "RELEASE 2020-04-27"
-	DEFAULT_ROOT       = "template"
-	DATE_FORMAT_STRING = DATE_FORMAT_WITH_TIMEZONE
-	INDENT             = "  " // 2 spaces
-	POST_TEMPLATE      = `---
-title: {{.Title}}
-date: {{.DateString}}
-author: {{.Author}}
-{{- if .Cover}}
-cover: {{.Cover}}
-{{- end}}
-draft: {{.Draft}}
-top: {{.Top}}
-{{- if .Preview}}
-preview: {{.Preview}}
-{{- end}}
-{{- if .Tags}}
-{{.Tags}}
-{{- end}}
-type: {{.Type}}
-hide: {{.Hide}}
----
-`
+	VERSION = "RELEASE 2020-05-16"
 )
-
-var globalConfig *GlobalConfig
-var rootPath string
 
 func main() {
 
@@ -82,8 +27,8 @@ func main() {
 			Name:  "build",
 			Usage: "构建博客到public目录",
 			Action: func(c *cli.Context) error {
-				ParseGlobalConfigByCli(c, false)
-				Build()
+				article.ParseGlobalConfigByCli(c, false)
+				command.Build()
 				return nil
 			},
 		},
@@ -91,10 +36,8 @@ func main() {
 			Name:  "preview",
 			Usage: "预览博客",
 			Action: func(c *cli.Context) error {
-				ParseGlobalConfigByCli(c, true)
-				Build()
-				Watch()
-				Serve()
+				article.ParseGlobalConfigByCli(c, true)
+				command.Serve(true)
 				return nil
 			},
 		},
@@ -102,9 +45,8 @@ func main() {
 			Name:  "publish",
 			Usage: "发布博客",
 			Action: func(c *cli.Context) error {
-				ParseGlobalConfigByCli(c, false)
-				Build()
-				Publish()
+				article.ParseGlobalConfigByCli(c, false)
+				command.Publish()
 				return nil
 			},
 		},
@@ -112,9 +54,8 @@ func main() {
 			Name:  "serve",
 			Usage: "运行博客",
 			Action: func(c *cli.Context) error {
-				ParseGlobalConfigByCli(c, true)
-				Build()
-				Serve()
+				article.ParseGlobalConfigByCli(c, true)
+				command.Serve(false)
 				return nil
 			},
 		},
@@ -122,7 +63,7 @@ func main() {
 			Name:  "convert",
 			Usage: "Convert Jekyll/Hexo post format to Ink format (Beta)",
 			Action: func(c *cli.Context) error {
-				Convert(c)
+				command.Convert(c)
 				return nil
 			},
 		},
@@ -178,283 +119,11 @@ func main() {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				New(c)
+				command.New(c)
 				return nil
 			},
 		},
 	}
 	app.Run(os.Args)
-	os.Exit(exitCode)
-}
-
-func ParseGlobalConfigByCli(c *cli.Context, develop bool) {
-	if c.Args().Len() > 0 {
-		rootPath = c.Args().Slice()[0]
-	} else {
-		rootPath = "."
-	}
-	ParseGlobalConfigWrap(rootPath, develop)
-	if globalConfig == nil {
-		ParseGlobalConfigWrap(DEFAULT_ROOT, develop)
-		if globalConfig == nil {
-			Fatal("Parse config.yml failed, please specify a valid path")
-		}
-	}
-}
-
-func ParseGlobalConfigWrap(root string, develop bool) {
-	rootPath = root
-	globalConfig = ParseGlobalConfig(filepath.Join(rootPath, "config.yml"), develop)
-	if globalConfig == nil {
-		return
-	}
-}
-
-func New(c *cli.Context) {
-	// If source folder does not exist, create
-	if _, err := os.Stat("source/"); os.IsNotExist(err) {
-		os.Mkdir("source", os.ModePerm)
-	}
-
-	var author, blogTitle, fileName string
-	var tags []string
-
-	// Default values
-	draft := "false"
-	top := "false"
-	postType := "post"
-	hide := "false"
-	date := time.Now()
-
-	// Empty string values
-	preview := ""
-	cover := ""
-
-	// Parse args
-	args := c.Args()
-	if args.Len() > 0 {
-		blogTitle = strings.Join(args.Slice(), " ")
-	}
-	if blogTitle == "" {
-		if c.String("title") != "" {
-			blogTitle = c.String("title")
-		} else {
-			Fatal("Please specify the name of the blog post")
-		}
-	}
-
-	fileName = strings.ReplaceAll(blogTitle, " ", "-") + ".md"
-	if c.String("file") != "" {
-		fileName = c.String("file")
-	}
-
-	author = "linx"
-
-	if c.Bool("post") && c.Bool("page") {
-		Fatal("The post and page arguments are mutually exclusive and cannot appear together")
-	}
-	if c.Bool("post") {
-		postType = "post"
-	}
-	if c.Bool("page") {
-		postType = "page"
-	}
-	if c.Bool("hide") {
-		hide = "true"
-	}
-	if c.Bool("draft") {
-		draft = "true"
-	}
-	if c.Bool("top") {
-		top = "true"
-	}
-
-	if c.String("preview") != "" {
-		preview = c.String("preview")
-	}
-	if c.String("cover") != "" {
-		cover = c.String("cover")
-	}
-
-	var filePath = "source/" + fileName
-	if postType == "post" {
-		filePath = "source/post/" + fileName
-	}
-
-	file, err := os.Create(filePath)
-	if err != nil {
-		Fatal(err)
-	}
-	postTemplate, err := template.New("post").Parse(POST_TEMPLATE)
-	if err != nil {
-		Fatal(err)
-	}
-
-	if c.StringSlice("tag") != nil {
-		tags = c.StringSlice("tag")
-	}
-
-	var tagString string
-	if len(tags) > 0 {
-		tagString = "tags:"
-		for _, tag := range tags {
-			tagString += "\n" + INDENT + "- " + tag
-		}
-	}
-
-	var dateString string
-	if c.String("date") != "" {
-		dateString = c.String("date")
-		_, err = time.Parse(DATE_FORMAT_STRING, dateString)
-		if err != nil {
-			Fatal("Illegal date string")
-		}
-	} else {
-		dateString = date.Format(DATE_FORMAT_STRING)
-	}
-	data := map[string]string{
-		"Title":      blogTitle,
-		"DateString": dateString,
-		"Author":     author,
-		"Draft":      draft,
-		"Top":        top,
-		"Type":       postType,
-		"Hide":       hide,
-		"Preview":    preview,
-		"Cover":      cover,
-		"Tags":       tagString,
-	}
-	fileWriter := bufio.NewWriter(file)
-	err = postTemplate.Execute(fileWriter, data)
-	if err != nil {
-		Fatal(err)
-	}
-	err = fileWriter.Flush()
-	if err != nil {
-		Fatal(err)
-	}
-}
-
-func Publish() {
-	command := globalConfig.Build.Publish
-	// Prepare exec command
-	var shell, flag string
-	if runtime.GOOS == "windows" {
-		shell = "cmd"
-		flag = "/C"
-	} else {
-		shell = "/bin/sh"
-		flag = "-c"
-	}
-	cmd := exec.Command(shell, flag, command)
-	cmd.Dir = rootPath
-	// Start print stdout and stderr of process
-	stdout, _ := cmd.StdoutPipe()
-	stderr, _ := cmd.StderrPipe()
-	out := bufio.NewScanner(stdout)
-	err := bufio.NewScanner(stderr)
-	// Print stdout
-	go func() {
-		for out.Scan() {
-			Log(out.Text())
-		}
-	}()
-	// Print stdin
-	go func() {
-		for err.Scan() {
-			Log(err.Text())
-		}
-	}()
-	// Exec command
-	cmd.Run()
-}
-
-func Convert(c *cli.Context) {
-	// Parse arguments
-	var sourcePath, rootPath string
-	args := c.Args()
-	if args.Len() > 0 {
-		sourcePath = args.Slice()[0]
-	} else {
-		Fatal("Please specify the posts source path")
-	}
-	if args.Len() > 1 {
-		rootPath = args.Slice()[1]
-	} else {
-		rootPath = "."
-	}
-	// Check if path exist
-	if !Exists(sourcePath) || !Exists(rootPath) {
-		Fatal("Please specify valid path")
-	}
-	// Parse Jekyll/Hexo post file
-	count := 0
-	symwalk.Walk(sourcePath, func(path string, f os.FileInfo, err error) error {
-		fileExt := strings.ToLower(filepath.Ext(path))
-		if fileExt == ".md" || fileExt == ".html" {
-			// Read data from file
-			data, err := ioutil.ReadFile(path)
-			fileName := filepath.Base(path)
-			Log("Converting " + fileName)
-			if err != nil {
-				Fatal(err.Error())
-			}
-			// Split config and markdown
-			var configStr, contentStr string
-			content := strings.TrimSpace(string(data))
-			parseAry := strings.SplitN(content, "---", 3)
-			parseLen := len(parseAry)
-			if parseLen == 3 { // Jekyll
-				configStr = parseAry[1]
-				contentStr = parseAry[2]
-			} else if parseLen == 2 { // Hexo
-				configStr = parseAry[0]
-				contentStr = parseAry[1]
-			}
-			// Parse config
-			var article ArticleConfig
-			if err = yaml.Unmarshal([]byte(configStr), &article); err != nil {
-				Fatal(err.Error())
-			}
-			tags := make(map[string]bool)
-			for _, t := range article.Tags {
-				tags[t] = true
-			}
-			for _, c := range article.Categories {
-				if _, ok := tags[c]; !ok {
-					article.Tags = append(article.Tags, c)
-				}
-			}
-			if article.Author == "" {
-				article.Author = "me"
-			}
-			// Convert date
-			dateAry := strings.SplitN(article.Date, ".", 2)
-			if len(dateAry) == 2 {
-				article.Date = dateAry[0]
-			}
-			if len(article.Date) == 10 {
-				article.Date = article.Date + " 00:00:00"
-			}
-			if len(article.Date) == 0 {
-				article.Date = "1970-01-01 00:00:00"
-			}
-			article.Update = ""
-			// Generate Config
-			var inkConfig []byte
-			if inkConfig, err = yaml.Marshal(article); err != nil {
-				Fatal(err.Error())
-			}
-			inkConfigStr := string(inkConfig)
-			markdownStr := inkConfigStr + "\n\n---\n\n" + contentStr + "\n"
-			targetName := "source/" + fileName
-			if fileExt != ".md" {
-				targetName = targetName + ".md"
-			}
-			ioutil.WriteFile(filepath.Join(rootPath, targetName), []byte(markdownStr), 0644)
-			count++
-		}
-		return nil
-	})
-	fmt.Printf("\nConvert finish, total %v articles\n", count)
+	os.Exit(1)
 }

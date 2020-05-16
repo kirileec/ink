@@ -1,20 +1,12 @@
-package main
+package util
 
 import (
-	"fmt"
 	"github.com/linxlib/logs"
+	"sync"
+
 	"io"
 	"os"
-	"runtime"
 	"time"
-)
-
-const (
-	CLR_W = ""
-	CLR_R = "\x1b[31;1m"
-	CLR_G = "\x1b[32;1m"
-	CLR_B = "\x1b[34;1m"
-	CLR_Y = "\x1b[33;1m"
 )
 
 const (
@@ -23,41 +15,8 @@ const (
 	DATE_FORMAT_WITH_TIMEZONE = "2006-01-02T15:04:05Z08:00"
 )
 
-var exitCode int
-
-// Print log
-func Log(info interface{}) {
-	fmt.Printf("%s\n", info)
-}
-
-// Print warning log
-func Warn(info interface{}) {
-	if runtime.GOOS == "windows" {
-		fmt.Printf("WARNING: %s\n", info)
-	} else {
-		fmt.Printf("%s%s\n%s", CLR_Y, info, "\x1b[0m")
-	}
-}
-
-// Print error log
-func Error(info interface{}) {
-	if runtime.GOOS == "windows" {
-		fmt.Printf("ERR: %s\n", info)
-	} else {
-		fmt.Printf("%s%s\n%s", CLR_R, info, "\x1b[0m")
-	}
-	exitCode = 1
-}
-
-// Print error log and exit
-func Fatal(info interface{}) {
-	Error(info)
-	os.Exit(1)
-}
-
 // Parse date by std date string
 func ParseDate(dateStr string) time.Time {
-
 	date, err := time.ParseInLocation(DATE_FORMAT_WITH_TIMEZONE, dateStr, time.Now().Location())
 	if err != nil {
 		date, err = time.ParseInLocation(DATE_FORMAT, dateStr, time.Now().Location())
@@ -66,7 +25,6 @@ func ParseDate(dateStr string) time.Time {
 			if err != nil {
 				logs.Error(err)
 			}
-
 		}
 	}
 	return date
@@ -95,49 +53,54 @@ func IsDir(path string) bool {
 
 // Copy folder and file
 // Refer to https://www.socketloop.com/tutorials/golang-copy-directory-including-sub-directories-files
-func CopyFile(source string, dest string) {
-	sourcefile, err := os.Open(source)
-	defer sourcefile.Close()
+func CopyFile(source string, dest string, wg *sync.WaitGroup) {
+	sourceFile, err := os.Open(source)
+	defer sourceFile.Close()
 	if err != nil {
-		Fatal(err.Error())
+		logs.Fatal(err)
 	}
 	destfile, err := os.Create(dest)
 	if err != nil {
-		Fatal(err.Error())
+		logs.Fatal(err)
 	}
 	defer destfile.Close()
 	defer wg.Done()
-	_, err = io.Copy(destfile, sourcefile)
+	_, err = io.Copy(destfile, sourceFile)
 	if err == nil {
-		sourceinfo, err := os.Stat(source)
+		sourceInfo, err := os.Stat(source)
 		if err != nil {
-			err = os.Chmod(dest, sourceinfo.Mode())
+			err = os.Chmod(dest, sourceInfo.Mode())
+			if err != nil {
+				logs.Error(err)
+			}
 		}
+	} else {
+		logs.Error(err)
 	}
 }
 
-func CopyDir(source string, dest string) {
-	sourceinfo, err := os.Stat(source)
+func CopyDir(source string, dest string, wg *sync.WaitGroup) {
+	sourceInfo, err := os.Stat(source)
 	if err != nil {
-		Fatal(err.Error())
+		logs.Error(err)
 	}
-	err = os.MkdirAll(dest, sourceinfo.Mode())
+	err = os.MkdirAll(dest, sourceInfo.Mode())
 	if err != nil {
-		Fatal(err.Error())
+		logs.Fatal(err)
 	}
 	directory, _ := os.Open(source)
 	defer directory.Close()
 	defer wg.Done()
 	objects, err := directory.Readdir(-1)
 	for _, obj := range objects {
-		sourcefilepointer := source + "/" + obj.Name()
-		destinationfilepointer := dest + "/" + obj.Name()
+		sourceFilePointer := source + "/" + obj.Name()
+		destinationFilePointer := dest + "/" + obj.Name()
 		if obj.IsDir() {
 			wg.Add(1)
-			CopyDir(sourcefilepointer, destinationfilepointer)
+			CopyDir(sourceFilePointer, destinationFilePointer, wg)
 		} else {
 			wg.Add(1)
-			go CopyFile(sourcefilepointer, destinationfilepointer)
+			go CopyFile(sourceFilePointer, destinationFilePointer, wg)
 		}
 	}
 }
