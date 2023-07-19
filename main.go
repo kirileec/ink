@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"github.com/BurntSushi/toml"
+	"golang.org/x/text/encoding/simplifiedchinese"
 	"html/template"
 	"os"
 	"os/exec"
@@ -14,6 +16,13 @@ import (
 	"github.com/facebookgo/symwalk"
 	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v2"
+)
+
+type Charset string
+
+const (
+	UTF8    = Charset("UTF-8")
+	GB18030 = Charset("GB18030")
 )
 
 const (
@@ -46,21 +55,36 @@ var globalConfig *GlobalConfig
 var themeConfig *ThemeConfig
 var rootPath string
 
+func ConvertByte2String(byte []byte, charset Charset) string {
+
+	var str string
+	switch charset {
+	case GB18030:
+		decodeBytes, _ := simplifiedchinese.GB18030.NewDecoder().Bytes(byte)
+		str = string(decodeBytes)
+	case UTF8:
+		fallthrough
+	default:
+		str = string(byte)
+	}
+
+	return str
+}
+
 func main() {
 
 	app := cli.NewApp()
 	app.Name = "ink"
-	app.Usage = "An elegant static blog generator"
+	app.Usage = "静态博客生成器"
 	app.Authors = []*cli.Author{
-		{Name: "Harrison", Email: "harrison@lolwut.com"},
-		{Name: "Oliver Allen", Email: "oliver@toyshop.com"},
+		{Name: "linx", Email: "sulinke1133@gmail.com"},
 	}
 	//app.Email = "imeoer@gmail.com"
 	app.Version = VERSION
 	app.Commands = []*cli.Command{
 		{
 			Name:  "build",
-			Usage: "Generate blog to public folder",
+			Usage: "构建静态页面到public目录",
 			Action: func(c *cli.Context) error {
 				ParseGlobalConfigByCli(c, false)
 				Build()
@@ -69,7 +93,7 @@ func main() {
 		},
 		{
 			Name:  "preview",
-			Usage: "Run in server mode to preview blog",
+			Usage: "预览博客",
 			Action: func(c *cli.Context) error {
 				ParseGlobalConfigByCli(c, true)
 				Build()
@@ -80,7 +104,7 @@ func main() {
 		},
 		{
 			Name:  "publish",
-			Usage: "Generate blog to public folder and publish",
+			Usage: "发布博客",
 			Action: func(c *cli.Context) error {
 				ParseGlobalConfigByCli(c, false)
 				Build()
@@ -90,7 +114,7 @@ func main() {
 		},
 		{
 			Name:  "serve",
-			Usage: "Run in server mode to serve blog",
+			Usage: "服务模式",
 			Action: func(c *cli.Context) error {
 				ParseGlobalConfigByCli(c, true)
 				Build()
@@ -100,7 +124,7 @@ func main() {
 		},
 		{
 			Name:  "convert",
-			Usage: "Convert Jekyll/Hexo post format to Ink format (Beta)",
+			Usage: "转换 Jekyll/Hexo 格式到 Ink 格式 (Beta)",
 			Action: func(c *cli.Context) error {
 				Convert(c)
 				return nil
@@ -108,57 +132,57 @@ func main() {
 		},
 		{
 			Name:  "new",
-			Usage: "Creates a new article",
+			Usage: "创建新文章",
 			Flags: []cli.Flag{
 				&cli.BoolFlag{
 					Name:  "hide",
-					Usage: "Hides the article",
+					Usage: "隐藏文章",
 				},
 				&cli.BoolFlag{
 					Name:  "toc",
-					Usage: "Adds a table of contents to the article",
+					Usage: "文章目录",
 				},
 				&cli.BoolFlag{
 					Name:  "top",
-					Usage: "Places the article at the top",
+					Usage: "置顶",
 				},
 				&cli.BoolFlag{
 					Name:  "post",
-					Usage: "The article is a post",
+					Usage: "文章类型",
 				},
 				&cli.BoolFlag{
 					Name:  "page",
-					Usage: "The article is a page",
+					Usage: "页面类型",
 				},
 				&cli.BoolFlag{
 					Name:  "draft",
-					Usage: "The article is a draft",
+					Usage: "草稿",
 				},
 
 				&cli.StringFlag{
 					Name:  "title",
-					Usage: "Article title",
+					Usage: "标题",
 				},
 				&cli.StringFlag{
 					Name:  "author",
-					Usage: "Article author",
+					Usage: "作者",
 				},
 				&cli.StringFlag{
 					Name:  "cover",
-					Usage: "Article cover path",
+					Usage: "文章封面",
 				},
 				&cli.StringFlag{
 					Name:  "date",
-					Usage: "The date and time on which the article was created (2006-01-02 15:04:05)",
+					Usage: "创建日期",
 				},
 				&cli.StringFlag{
 					Name:  "file",
-					Usage: "The path of where the article will be stored",
+					Usage: "文件路径",
 				},
 
 				&cli.StringSliceFlag{
 					Name:  "tag",
-					Usage: "Adds a tag to the article",
+					Usage: "文章标签",
 				},
 			},
 			Action: func(c *cli.Context) error {
@@ -327,11 +351,13 @@ func New(c *cli.Context) {
 
 func Publish() {
 	command := globalConfig.Build.Publish
+	commandWin := globalConfig.Build.PublishW
 	// Prepare exec command
 	var shell, flag string
 	if runtime.GOOS == "windows" {
 		shell = "cmd"
 		flag = "/C"
+		command = commandWin
 	} else {
 		shell = "/bin/sh"
 		flag = "-c"
@@ -346,13 +372,24 @@ func Publish() {
 	// Print stdout
 	go func() {
 		for out.Scan() {
-			Log(out.Text())
+			if runtime.GOOS == "windows" {
+				garbledStr := ConvertByte2String(out.Bytes(), GB18030)
+				Log(garbledStr)
+			} else {
+				Log(out.Text())
+			}
+
 		}
 	}()
 	// Print stdin
 	go func() {
 		for err.Scan() {
-			Log(err.Text())
+			if runtime.GOOS == "windows" {
+				garbledStr := ConvertByte2String(out.Bytes(), GB18030)
+				Log(garbledStr)
+			} else {
+				Log(err.Text())
+			}
 		}
 	}()
 	// Exec command
@@ -385,14 +422,18 @@ func Convert(c *cli.Context) {
 			// Read data from file
 			data, err := os.ReadFile(path)
 			fileName := filepath.Base(path)
-			Log("Converting " + fileName)
+			Log("转换中 " + fileName)
 			if err != nil {
 				Fatal(err.Error())
 			}
 			// Split config and markdown
 			var configStr, contentStr string
 			content := strings.TrimSpace(string(data))
-			parseAry := strings.SplitN(content, "---", 3)
+			var sep = "---"
+			if strings.Contains(string(data), "+++") {
+				sep = "+++"
+			}
+			parseAry := strings.SplitN(content, sep, 3)
 			parseLen := len(parseAry)
 			if parseLen == 3 { // Jekyll
 				configStr = parseAry[1]
@@ -403,9 +444,16 @@ func Convert(c *cli.Context) {
 			}
 			// Parse config
 			var article ArticleConfig
-			if err = yaml.Unmarshal([]byte(configStr), &article); err != nil {
-				Fatal(err.Error())
+			if sep == "+++" {
+				if err = toml.Unmarshal([]byte(configStr), &article); err != nil {
+					Fatal(err.Error())
+				}
+			} else {
+				if err = yaml.Unmarshal([]byte(configStr), &article); err != nil {
+					Fatal(err.Error())
+				}
 			}
+
 			tags := make(map[string]bool)
 			for _, t := range article.Tags {
 				tags[t] = true
@@ -419,16 +467,28 @@ func Convert(c *cli.Context) {
 				article.Author = "me"
 			}
 			// Convert date
-			dateAry := strings.SplitN(article.Date, ".", 2)
-			if len(dateAry) == 2 {
-				article.Date = dateAry[0]
+			//"2006-01-02T15:04:05Z07:00"
+			tf1 := "2006-01-02T15:04:05Z08:00"
+			tf2 := "2006-01-02 15:04:05"
+			tf3 := "2006-01-02 15:04:05 +0800"
+			tf4 := "2006-01-02"
+			if t, err := time.Parse(tf1, article.Date); err != nil {
+				if _, err := time.Parse(tf2, article.Date); err != nil {
+					if _, err := time.Parse(tf3, article.Date); err != nil {
+						if _, err := time.Parse(tf4, article.Date); err != nil {
+						} else {
+							article.Date += " 00:00:00"
+						}
+					} else {
+
+					}
+				} else {
+
+				}
+			} else {
+				article.Date = t.Format(tf3)
 			}
-			if len(article.Date) == 10 {
-				article.Date = article.Date + " 00:00:00"
-			}
-			if len(article.Date) == 0 {
-				article.Date = "1970-01-01 00:00:00"
-			}
+
 			article.Update = ""
 			// Generate Config
 			var inkConfig []byte
@@ -437,10 +497,11 @@ func Convert(c *cli.Context) {
 			}
 			inkConfigStr := string(inkConfig)
 			markdownStr := inkConfigStr + "\n\n---\n\n" + contentStr + "\n"
-			targetName := "source/" + fileName
+			targetName := fileName
 			if fileExt != ".md" {
 				targetName = targetName + ".md"
 			}
+
 			os.WriteFile(filepath.Join(rootPath, targetName), []byte(markdownStr), 0644)
 			count++
 		}

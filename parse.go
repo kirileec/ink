@@ -38,11 +38,12 @@ type AuthorConfig struct {
 }
 
 type BuildConfig struct {
-	Output  string
-	Port    string
-	Watch   bool
-	Copy    []string
-	Publish string
+	Output   string
+	Port     string
+	Watch    bool
+	Copy     []string
+	Publish  string
+	PublishW string
 }
 
 type GlobalConfig struct {
@@ -53,24 +54,25 @@ type GlobalConfig struct {
 	Develop bool
 }
 
+// ArticleConfig 文章配置
 type ArticleConfig struct {
-	Title      string
-	Date       string
-	Update     string
-	Author     string
-	Tags       []string
-	Categories []string
-	Topic      string
-	Cover      string
-	Draft      bool
+	Title      string   //标题
+	Date       string   //日期
+	Update     string   //更新日期
+	Author     string   //作者
+	Tags       []string //标签
+	Categories []string //分类
+	Topic      string   //主题
+	Cover      string   //封面
+	Draft      bool     //草稿
 	Preview    template.HTML
-	Top        bool
-	Type       string
-	Hide       bool
-	Toc        bool
-	Image      string
-	Subtitle   string
-	Config     map[string]interface{}
+	Top        bool                   //置顶
+	Type       string                 //类型
+	Hide       bool                   //隐藏
+	Toc        bool                   //目录
+	Image      string                 //图片
+	Subtitle   string                 //子标题
+	Config     map[string]interface{} //其他配置
 }
 
 type Article struct {
