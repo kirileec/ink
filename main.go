@@ -15,7 +15,7 @@ import (
 
 	"github.com/facebookgo/symwalk"
 	"github.com/urfave/cli/v2"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 type Charset string
@@ -223,6 +223,12 @@ func New(c *cli.Context) {
 	if _, err := os.Stat("source/"); os.IsNotExist(err) {
 		os.Mkdir("source", os.ModePerm)
 	}
+	if _, err := os.Stat("source/page"); os.IsNotExist(err) {
+		os.Mkdir("source/page", os.ModePerm)
+	}
+	if _, err := os.Stat("source/post"); os.IsNotExist(err) {
+		os.Mkdir("source/post", os.ModePerm)
+	}
 
 	var author, blogTitle, fileName string
 	var tags []string
@@ -293,7 +299,7 @@ func New(c *cli.Context) {
 		cover = c.String("cover")
 	}
 
-	var filePath = "source/" + fileName
+	var filePath = "source/" + postType + "/" + fileName
 	file, err := os.Create(filePath)
 	if err != nil {
 		Fatal(err)

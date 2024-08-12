@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	gomk "github.com/gomarkdown/markdown"
 	"github.com/gomarkdown/markdown/ast"
